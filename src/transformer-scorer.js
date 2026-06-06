@@ -53,7 +53,7 @@ export async function loadScoringModel(progressCallback = () => {}) {
   modelLoading = true;
   try {
     // 日本語も解釈できる軽量な多言語モデル (約270MBですが、ブラウザでキャッシュされます)
-    const modelName = 'Xenova/distilbert-base-multilingual-cased';
+    const modelName = 'Xenova/bert-base-multilingual-cased';
     
     fillMaskPipeline = await pipeline('fill-mask', modelName, {
       progress_callback: (data) => {
