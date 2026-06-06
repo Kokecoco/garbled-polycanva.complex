@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UTF-8→Shift-JIS 文字化け復元ツール</title>
+  <meta name="description" content="UTF-8日本語テキストがShift-JISとして誤デコードされて発生した文字化け（縺薙ｓ縺ｫ縺｡縺ｯ 等）を、文字コード理論に基づくバイト解析とTransformers.js言語モデルを用いて完全静的ブラウザ環境で復元します。">
+  
+  <!-- Google Fonts Outfit & Noto Sans JP -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=Outfit:wght@300;400;600;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="background-decor">
+    <div class="blur-circle blur-circle-1"></div>
+    <div class="blur-circle blur-circle-2"></div>
+  </div>
+
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo-area">
+        <span class="logo-icon">🔀</span>
+        <h1 class="logo-title">Garbled <span class="accent-text">Recoverer</span></h1>
+      </div>
+      <p class="logo-subtitle">UTF-8 → Shift-JIS 文字化けのコード制約的・統計的復元</p>
+    </header>
+
+    <main class="app-main">
+      <!-- 入力エリア -->
+      <section class="card control-card" aria-labelledby="input-section-title">
+        <h2 id="input-section-title" class="sr-only">入力フォーム</h2>
+        
+        <div class="form-group">
+          <label for="input-text" class="input-label">文字化けしたテキスト</label>
+          <textarea 
+            id="input-text" 
+            placeholder="例: 縺薙ｓ縺ｫ縺｡縺ｯ" 
+            rows="4" 
+            spellcheck="false"
+            autocomplete="off"
+          ></textarea>
+        </div>
+
+        <div class="settings-row">
+          <div class="form-group inline-group">
+            <label for="beam-width" class="input-label">ビーム幅 (Beam Width)</label>
+            <div class="number-input-wrapper">
+              <input type="number" id="beam-width" value="100" min="1" max="1000" step="1">
+              <span class="input-hint">大きいほど高精度（低速）</span>
+            </div>
+          </div>
+
+          <div class="form-group inline-group">
+            <span class="input-label">AIモデル (Transformers.js)</span>
+            <div class="model-status-wrapper">
+              <button type="button" id="btn-load-model" class="btn btn-secondary">
+                <span class="icon">🤖</span> AIモデルをロード
+              </button>
+              <div id="model-status" class="status-badge status-unloaded">
+                未ロード（高速モード）
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- プログレスバー -->
+        <div id="model-progress-container" class="progress-container hidden">
+          <div class="progress-bar-label">
+            <span>AIモデルダウンロード中 (約270MB)...</span>
+            <span id="model-progress-text">0%</span>
+          </div>
+          <div class="progress-bar-track">
+            <div id="model-progress-fill" class="progress-bar-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button type="button" id="btn-recover" class="btn btn-primary btn-large">
+            <span class="icon">✨</span> 文字化けを復元する
+          </button>
+        </div>
+      </section>
+
+      <!-- 進行状況表示 -->
+      <section id="recovery-progress-container" class="card progress-card hidden" aria-label="処理状況">
+        <div class="progress-bar-label">
+          <span>文字コード境界の探索とビームサーチ進行中...</span>
+          <span id="recovery-progress-text">0%</span>
+        </div>
+        <div class="progress-bar-track">
+          <div id="recovery-progress-fill" class="progress-bar-fill accent-track" style="width: 0%"></div>
+        </div>
+      </section>
+
+      <!-- 結果エリア -->
+      <section id="results-section" class="card results-card hidden" aria-labelledby="results-title">
+        <div class="results-header">
+          <h2 id="results-title" class="section-title">復元候補一覧</h2>
+          <span id="results-count" class="badge">0件の候補</span>
+        </div>
+        
+        <div id="results-list" class="results-list">
+          <!-- 動的に復元結果が挿入されます -->
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>&copy; 2026 Garbled Recoverer. 完全静的ブラウザ動作。サーバーへのデータ送信は行われません。</p>
+      <p class="footer-tech">Powered by Web Encoding API & Transformers.js</p>
+    </footer>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
