@@ -18,11 +18,14 @@ import { scoreTextHeuristic, scoreTextWithTransformers, isModelLoaded } from './
  */
 export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, stepCallback = () => {}) {
   const options = typeof optionsOrBeamWidth === 'number'
-    ? { beamWidth: optionsOrBeamWidth, topK: 20, maxBranchingPerStep: 192 }
-    : { beamWidth: 100, topK: 20, maxBranchingPerStep: 192, ...optionsOrBeamWidth };
-  const beamWidth = options.beamWidth;
-  const topK = options.topK;
-  const maxBranchingPerStep = options.maxBranchingPerStep;
+    ? { beamWidth: optionsOrBeamWidth, topK: 20, maxBranchingPerStep: 192, yieldEverySteps: 1, yieldEveryExpansions: 128, rerankConcurrency: 4 }
+    : { beamWidth: 100, topK: 20, maxBranchingPerStep: 192, yieldEverySteps: 1, yieldEveryExpansions: 128, rerankConcurrency: 4, ...optionsOrBeamWidth };
+  const beamWidth = clampPositiveInt(options.beamWidth, 100, 1, 1000);
+  const topK = clampPositiveInt(options.topK, 20, 1, 50);
+  const maxBranchingPerStep = clampPositiveInt(options.maxBranchingPerStep, 192, 8, 256);
+  const yieldEverySteps = clampPositiveInt(options.yieldEverySteps, 1, 1, 16);
+  const yieldEveryExpansions = clampPositiveInt(options.yieldEveryExpansions, 128, 32, 4096);
+  const rerankConcurrency = clampPositiveInt(options.rerankConcurrency, 4, 1, 8);
 
   const len = flatBytes.length;
   if (len === 0) return [];
@@ -36,7 +39,7 @@ export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, ste
     text: '',
     score: 0.0,
     heuristicScore: 0.0,
-    history: [] // 復元の根拠履歴: { originalBytes: string, char: string }
+    historyNode: null
   }];
 
   const completedStates = [];
@@ -45,6 +48,7 @@ export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, ste
   const maxSteps = len * 2;
   let step = 0;
 
+  let expansionsSinceYield = 0;
   while (beam.length > 0 && step < maxSteps) {
     const nextStatesPool = [];
     let allCompleted = true;
@@ -74,12 +78,13 @@ export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, ste
           text: state.text, // 文字は追加しない
           score: state.score - 5.0, // ペナルティ
           heuristicScore: state.heuristicScore - 5.0,
-          history: state.history.concat({
+          historyNode: {
+            prev: state.historyNode,
             originalBytes: typeof flatBytes[state.byteIndex] === 'number' 
               ? flatBytes[state.byteIndex].toString(16).toUpperCase() 
               : flatBytes[state.byteIndex],
             char: '' // 不正文字マーク
-          })
+          }
         });
         continue;
       }
@@ -109,11 +114,18 @@ export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, ste
           text: nextText,
           score: textScore + ambiguityPenalty,
           heuristicScore: textScore + ambiguityPenalty,
-          history: state.history.concat({
+          historyNode: {
+            prev: state.historyNode,
             originalBytes: originalBytesStr,
             char: cand.char || '(無視)'
-          })
+          }
         });
+
+        expansionsSinceYield++;
+        if (expansionsSinceYield >= yieldEveryExpansions) {
+          expansionsSinceYield = 0;
+          await yieldToEventLoop();
+        }
       }
     }
 
@@ -139,6 +151,9 @@ export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, ste
 
     step++;
     stepCallback(Math.min(0.9, (step / len))); // 進捗率通知 (MAX 90%)
+    if (step % yieldEverySteps === 0) {
+      await yieldToEventLoop();
+    }
   }
 
   // 途中で完了しなかったビーム内の残存状態もマージ
@@ -166,14 +181,14 @@ export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, ste
   // Transformers.js モデルがロードされている場合、上位候補をBERTで再スコアリング (Reranking)
   if (isModelLoaded()) {
     console.log('Reranking candidates using Transformers.js...');
-    finalCandidates = await Promise.all(finalCandidates.map(async (cand) => {
+    finalCandidates = await mapWithConcurrency(finalCandidates, rerankConcurrency, async (cand) => {
       const transformerScore = await scoreTextWithTransformers(cand.text);
       return {
         ...cand,
         lmScore: transformerScore,
         score: transformerScore // Transformersのスコアで上書き
       };
-    }));
+    });
     finalCandidates.sort((a, b) => b.score - a.score);
   }
 
@@ -184,7 +199,7 @@ export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, ste
     score: c.score,
     heuristicScore: c.heuristicScore,
     lmScore: c.lmScore ?? null,
-    history: c.history
+    history: historyNodeToArray(c.historyNode)
   }));
 }
 
@@ -224,4 +239,52 @@ function getCandidatePrior(candidate) {
   else score -= 1.0;
 
   return score;
+}
+
+function historyNodeToArray(node) {
+  const history = [];
+  let current = node;
+  while (current) {
+    history.push({
+      originalBytes: current.originalBytes,
+      char: current.char
+    });
+    current = current.prev;
+  }
+  history.reverse();
+  return history;
+}
+
+function clampPositiveInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (true) {
+      const index = cursor;
+      cursor++;
+      if (index >= items.length) break;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+
+  const workers = [];
+  for (let i = 0; i < Math.min(concurrency, items.length); i++) {
+    workers.push(worker());
+  }
+
+  await Promise.all(workers);
+  return results;
+}
+
+function yieldToEventLoop() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }

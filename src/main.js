@@ -85,9 +85,11 @@ async function handleRecover() {
     return;
   }
 
-  const beamWidth = parseInt(beamWidthInput.value, 10) || 100;
-  const candidateLimit = parseInt(candidateLimitInput.value, 10) || 5;
+  const beamWidth = parseBoundedInt(beamWidthInput.value, 100, 1, 1000);
+  const candidateLimit = parseBoundedInt(candidateLimitInput.value, 5, 1, 20);
   const debugMode = debugModeInput.checked;
+  beamWidthInput.value = String(beamWidth);
+  candidateLimitInput.value = String(candidateLimit);
 
   // UI状態の初期化
   btnRecover.disabled = true;
@@ -255,4 +257,10 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function parseBoundedInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }
