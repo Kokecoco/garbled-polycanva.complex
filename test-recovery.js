@@ -7,6 +7,7 @@
 
 import { textToSjisBytes } from './src/utf8-recovery.js';
 import { performBeamSearch } from './src/beam-search.js';
+import { scoreTextHeuristic } from './src/transformer-scorer.js';
 
 async function runTest() {
   console.log('--- 復元ロジックテスト開始 ---');
@@ -60,6 +61,19 @@ async function runTest() {
     console.log('\n🎉 テスト成功: 「こんにちは」に正しく復元されました！');
   } else {
     console.log(`\n❌ テスト失敗: 最優先候補が [${bestResult}] となっています。`);
+  }
+
+  console.log('\n--- テスト3: 語彙・漢字妥当性スコア ---');
+  const natural = '文字化けした日本語のテキストの例';
+  const unnatural = '文字化けした日本語のダキスト〮侀';
+  const naturalScore = scoreTextHeuristic(natural);
+  const unnaturalScore = scoreTextHeuristic(unnatural);
+  console.log(`自然文: ${natural} => ${naturalScore.toFixed(4)}`);
+  console.log(`不自然文: ${unnatural} => ${unnaturalScore.toFixed(4)}`);
+  if (naturalScore > unnaturalScore) {
+    console.log('🎉 テスト3成功: 自然な語彙・漢字の文が高スコアです。');
+  } else {
+    console.log('❌ テスト3失敗: 不自然な文の方が高スコアです。');
   }
 }
 
