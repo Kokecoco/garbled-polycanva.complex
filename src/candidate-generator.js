@@ -190,6 +190,37 @@ export function generateCandidatesAt(flatBytes, index) {
 }
 
 /**
+ * 各バイト位置ごとの候補集合（構造化データ）を生成します。
+ * Stage-1 の曖昧性を可視化・デバッグするために使用します。
+ *
+ * @param {Array<number|string>} flatBytes
+ * @param {number} maxCharsPerPosition
+ * @returns {Array<{byteIndex:number, originalByte:number|string, candidates:string[]}>}
+ */
+export function generateCandidateSets(flatBytes, maxCharsPerPosition = 32) {
+  const sets = [];
+  for (let i = 0; i < flatBytes.length; i++) {
+    const candidates = generateCandidatesAt(flatBytes, i);
+    const uniqueChars = [];
+    const seen = new Set();
+    for (const cand of candidates) {
+      const char = cand.char || '(無視)';
+      if (!seen.has(char)) {
+        seen.add(char);
+        uniqueChars.push(char);
+      }
+      if (uniqueChars.length >= maxCharsPerPosition) break;
+    }
+    sets.push({
+      byteIndex: i,
+      originalByte: flatBytes[i],
+      candidates: uniqueChars
+    });
+  }
+  return sets;
+}
+
+/**
  * 範囲 [start, end] の配列を生成します。
  */
 function range(start, end) {
