@@ -6,12 +6,15 @@
  */
 
 import { textToSjisBytes } from './utf8-recovery.js';
+import { generateCandidateSets } from './candidate-generator.js';
 import { performBeamSearch } from './beam-search.js';
 import { loadScoringModel, isModelLoaded } from './transformer-scorer.js';
 
 // DOM 要素の取得
 const inputText = document.getElementById('input-text');
 const beamWidthInput = document.getElementById('beam-width');
+const candidateLimitInput = document.getElementById('candidate-limit');
+const debugModeInput = document.getElementById('debug-mode');
 const btnLoadModel = document.getElementById('btn-load-model');
 const modelStatus = document.getElementById('model-status');
 const modelProgressContainer = document.getElementById('model-progress-container');
@@ -23,7 +26,10 @@ const recoveryProgressFill = document.getElementById('recovery-progress-fill');
 const recoveryProgressText = document.getElementById('recovery-progress-text');
 const resultsSection = document.getElementById('results-section');
 const resultsCount = document.getElementById('results-count');
+const bestResultCard = document.getElementById('best-result-card');
 const resultsList = document.getElementById('results-list');
+const debugSection = document.getElementById('debug-section');
+const debugOutput = document.getElementById('debug-output');
 
 // イベントリスナーの登録
 btnLoadModel.addEventListener('click', handleLoadModel);
@@ -80,6 +86,8 @@ async function handleRecover() {
   }
 
   const beamWidth = parseInt(beamWidthInput.value, 10) || 100;
+  const candidateLimit = parseInt(candidateLimitInput.value, 10) || 5;
+  const debugMode = debugModeInput.checked;
 
   // UI状態の初期化
   btnRecover.disabled = true;
@@ -92,16 +100,26 @@ async function handleRecover() {
     // 1. Shift-JISバイト列へのデコード（文字化け文字列から元のUTF-8推定バイト列へ）
     const sjisBytes = textToSjisBytes(text);
     console.log('SJIS Bytes extracted:', sjisBytes);
+    const candidateSets = generateCandidateSets(sjisBytes);
 
     // 2. ビームサーチ探索の実行
-    const candidates = await performBeamSearch(sjisBytes, beamWidth, (progress) => {
+    const candidates = await performBeamSearch(
+      sjisBytes,
+      { beamWidth, topK: Math.max(candidateLimit * 4, 20) },
+      (progress) => {
       const percentage = Math.round(progress * 100);
       recoveryProgressFill.style.width = `${percentage}%`;
       recoveryProgressText.textContent = `${percentage}%`;
-    });
+      }
+    );
 
     // 3. 結果の表示
-    renderResults(candidates);
+    renderResults(candidates.slice(0, candidateLimit), {
+      candidateSets,
+      debugMode,
+      beamWidth,
+      usedModel: isModelLoaded()
+    });
   } catch (error) {
     console.error('Recovery process failed:', error);
     alert('復元処理中にエラーが発生しました: ' + error.message);
@@ -117,15 +135,30 @@ async function handleRecover() {
 /**
  * 復元結果リストを画面にレンダリングします。
  */
-function renderResults(candidates) {
+function renderResults(candidates, options = {}) {
+  const { candidateSets = [], debugMode = false, beamWidth = 100, usedModel = false } = options;
   resultsList.innerHTML = '';
   resultsCount.textContent = `${candidates.length}件の候補`;
+  debugOutput.textContent = '';
+  debugSection.classList.add('hidden');
+  bestResultCard.innerHTML = '';
 
   if (candidates.length === 0) {
     resultsList.innerHTML = '<div class="result-item"><div class="result-text">復元候補が見つかりませんでした。文字コードの境界が不整合、または欠損が激しすぎます。</div></div>';
     resultsSection.classList.remove('hidden');
     return;
   }
+
+  const best = candidates[0];
+  const confidence = calculateConfidence(candidates);
+  bestResultCard.innerHTML = `
+    <div class="best-label">Most Likely Reconstruction</div>
+    <div class="best-text">${escapeHtml(best.text)}</div>
+    <div class="best-meta">
+      <span class="badge">Confidence: ${confidence}%</span>
+      <span class="badge">${usedModel ? 'Transformer Ranking' : 'Heuristic Ranking'}</span>
+    </div>
+  `;
 
   candidates.forEach((cand, idx) => {
     const item = document.createElement('div');
@@ -156,7 +189,8 @@ function renderResults(candidates) {
       <div class="result-main-row">
         <div class="result-text">${escapeHtml(cand.text)}</div>
         <div class="result-meta">
-          <span class="score-badge">${idx === 0 ? '👑 Best' : `Score: ${normalizedScore}`}</span>
+          <span class="score-badge">${idx === 0 ? '👑 Best' : `${idx + 1}. Alternative`}</span>
+          <span class="score-badge">Score: ${normalizedScore}</span>
           <button type="button" class="btn-copy" title="クリップボードにコピー">📋</button>
         </div>
       </div>
@@ -181,8 +215,33 @@ function renderResults(candidates) {
     resultsList.appendChild(item);
   });
 
+  if (debugMode) {
+    const debugData = {
+      beamWidth,
+      candidateSets,
+      beamResults: candidates.map((cand, idx) => ({
+        rank: idx + 1,
+        text: cand.text,
+        finalScore: cand.score,
+        heuristicScore: cand.heuristicScore,
+        languageModelScore: cand.lmScore
+      }))
+    };
+    debugOutput.textContent = JSON.stringify(debugData, null, 2);
+    debugSection.classList.remove('hidden');
+  }
+
   resultsSection.classList.remove('hidden');
   resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function calculateConfidence(candidates) {
+  if (candidates.length === 1) return 100;
+  const topScore = candidates[0].score;
+  const secondScore = candidates[1].score;
+  const topExp = Math.exp(topScore);
+  const secondExp = Math.exp(secondScore);
+  return Math.max(1, Math.min(100, Math.round((topExp / (topExp + secondExp)) * 100)));
 }
 
 /**

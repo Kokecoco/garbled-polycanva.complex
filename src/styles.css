@@ -241,6 +241,22 @@ textarea:focus {
   gap: 12px;
 }
 
+.compact-group {
+  margin-top: -8px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.checkbox-label input[type='checkbox'] {
+  accent-color: var(--color-primary);
+}
+
 input[type="number"] {
   width: 100px;
   background: rgba(0, 0, 0, 0.25);
@@ -420,6 +436,34 @@ input[type="number"]:focus {
   gap: 16px;
 }
 
+.best-result-card {
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: var(--border-radius-sm);
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.best-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.best-text {
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.best-meta {
+  display: flex;
+  gap: 8px;
+}
+
 /* 各復元候補カード */
 .result-item {
   background: rgba(255, 255, 255, 0.02);
@@ -529,6 +573,30 @@ input[type="number"]:focus {
 .token-restored {
   font-weight: 600;
   color: var(--color-accent);
+}
+
+.debug-section {
+  margin-top: 18px;
+  border-top: 1px dashed var(--border-color);
+  padding-top: 14px;
+}
+
+.debug-title {
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.debug-output {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow: auto;
 }
 
 /* ==========================================================================

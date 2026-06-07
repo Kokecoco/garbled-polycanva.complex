@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=Outfit:wght@300;400;600;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   
-  <script type="module" crossorigin src="./assets/index.BBYYMPDJ.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index.kLtT0mK4.css">
+  <script type="module" crossorigin src="./assets/index.f5zRKgYL.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index.CXK-6HjT.css">
 </head>
 <body>
   <div class="background-decor">
@@ -55,6 +55,14 @@
           </div>
 
           <div class="form-group inline-group">
+            <label for="candidate-limit" class="input-label">表示候補数</label>
+            <div class="number-input-wrapper">
+              <input type="number" id="candidate-limit" value="5" min="1" max="20" step="1">
+              <span class="input-hint">上位N件を表示</span>
+            </div>
+          </div>
+
+          <div class="form-group inline-group">
             <span class="input-label">AIモデル (Transformers.js)</span>
             <div class="model-status-wrapper">
               <button type="button" id="btn-load-model" class="btn btn-secondary">
@@ -65,6 +73,13 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="form-group inline-group compact-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="debug-mode">
+            <span>デバッグ表示（候補集合 / ビーム結果 / スコア詳細）</span>
+          </label>
         </div>
 
         <!-- プログレスバー -->
@@ -102,10 +117,17 @@
           <h2 id="results-title" class="section-title">復元候補一覧</h2>
           <span id="results-count" class="badge">0件の候補</span>
         </div>
+
+        <div id="best-result-card" class="best-result-card"></div>
         
         <div id="results-list" class="results-list">
           <!-- 動的に復元結果が挿入されます -->
         </div>
+
+        <section id="debug-section" class="debug-section hidden">
+          <h3 class="debug-title">デバッグ情報</h3>
+          <pre id="debug-output" class="debug-output"></pre>
+        </section>
       </section>
     </main>
 

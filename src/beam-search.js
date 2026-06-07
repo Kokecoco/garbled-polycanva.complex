@@ -12,11 +12,17 @@ import { scoreTextHeuristic, scoreTextWithTransformers, isModelLoaded } from './
  * ビームサーチを実行して復元候補を探索します。
  * 
  * @param {Array<number|string>} flatBytes - バイトおよびプレースホルダーの配列
- * @param {number} beamWidth - ビーム幅 (初期値: 100)
+ * @param {number|{beamWidth?:number, topK?:number}} optionsOrBeamWidth - ビーム幅またはオプション
  * @param {Function} stepCallback - 各ステップの進捗通知コールバック
  * @returns {Promise<Array<{text: string, score: number, history: Array<any>}>>} 復元結果候補リスト
  */
-export async function performBeamSearch(flatBytes, beamWidth = 100, stepCallback = () => {}) {
+export async function performBeamSearch(flatBytes, optionsOrBeamWidth = 100, stepCallback = () => {}) {
+  const options = typeof optionsOrBeamWidth === 'number'
+    ? { beamWidth: optionsOrBeamWidth, topK: 20 }
+    : { beamWidth: 100, topK: 20, ...optionsOrBeamWidth };
+  const beamWidth = options.beamWidth;
+  const topK = options.topK;
+
   const len = flatBytes.length;
   if (len === 0) return [];
 
@@ -25,6 +31,7 @@ export async function performBeamSearch(flatBytes, beamWidth = 100, stepCallback
     byteIndex: 0,
     text: '',
     score: 0.0,
+    heuristicScore: 0.0,
     history: [] // 復元の根拠履歴: { originalBytes: string, char: string }
   }];
 
@@ -57,6 +64,7 @@ export async function performBeamSearch(flatBytes, beamWidth = 100, stepCallback
           byteIndex: state.byteIndex + 1,
           text: state.text, // 文字は追加しない
           score: state.score - 5.0, // ペナルティ
+          heuristicScore: state.heuristicScore - 5.0,
           history: state.history.concat({
             originalBytes: typeof flatBytes[state.byteIndex] === 'number' 
               ? flatBytes[state.byteIndex].toString(16).toUpperCase() 
@@ -87,6 +95,7 @@ export async function performBeamSearch(flatBytes, beamWidth = 100, stepCallback
           byteIndex: nextByteIndex,
           text: nextText,
           score: textScore + ambiguityPenalty,
+          heuristicScore: textScore + ambiguityPenalty,
           history: state.history.concat({
             originalBytes: originalBytesStr,
             char: cand.char || '(無視)'
@@ -137,7 +146,7 @@ export async function performBeamSearch(flatBytes, beamWidth = 100, stepCallback
   finalCandidates.sort((a, b) => b.score - a.score);
 
   // 上位20件程度に絞り込む
-  finalCandidates = finalCandidates.slice(0, 20);
+  finalCandidates = finalCandidates.slice(0, topK);
 
   stepCallback(0.95); // 並び替えフェーズへ
 
@@ -149,6 +158,7 @@ export async function performBeamSearch(flatBytes, beamWidth = 100, stepCallback
       const transformerScore = await scoreTextWithTransformers(cand.text);
       reranked.push({
         ...cand,
+        lmScore: transformerScore,
         score: transformerScore // Transformersのスコアで上書き
       });
     }
@@ -161,6 +171,8 @@ export async function performBeamSearch(flatBytes, beamWidth = 100, stepCallback
   return finalCandidates.map(c => ({
     text: c.text,
     score: c.score,
+    heuristicScore: c.heuristicScore,
+    lmScore: c.lmScore ?? null,
     history: c.history
   }));
 }
