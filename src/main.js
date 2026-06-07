@@ -100,7 +100,7 @@ async function handleRecover() {
     // 1. Shift-JISバイト列へのデコード（文字化け文字列から元のUTF-8推定バイト列へ）
     const sjisBytes = textToSjisBytes(text);
     console.log('SJIS Bytes extracted:', sjisBytes);
-    const candidateSets = generateCandidateSets(sjisBytes);
+    const candidateSets = debugMode ? generateCandidateSets(sjisBytes) : [];
 
     // 2. ビームサーチ探索の実行
     const candidates = await performBeamSearch(
